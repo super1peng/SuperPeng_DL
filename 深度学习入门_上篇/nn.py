@@ -1,0 +1,106 @@
+#coding:utf-8
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+# 生成数据集
+np.random.seed(0)
+N = 100 # number of points per class
+D = 2 # dimensionality
+K = 3 # number of classes
+X = np.zeros((N*K,D))
+y = np.zeros(N*K, dtype='uint8')
+for j in range(K):
+	ix = range(N*j,N*(j+1))
+	r = np.linspace(0.0,1,N) # radius
+	t = np.linspace(j*4,(j+1)*4,N) + np.random.randn(N)*0.2 # theta
+	X[ix] = np.c_[r*np.sin(t), r*np.cos(t)]
+	y[ix] = j
+
+
+# 设置神经网络大小
+h = 100 # 设置隐层大小
+
+# 设置第一个隐层
+W = 0.01 * np.random.randn(D,h)#  输入x:300*2  中间隐层 2*100
+b = np.zeros((1,h))
+
+# 设置第二个隐层
+W2 = 0.01 * np.random.randn(h,K)  # 100 * 3
+b2 = np.zeros((1,K))
+
+
+# 设置超参数
+step_size = 1e-0
+reg = 1e-3 # regularization strength
+
+# gradient descent loop
+num_examples = X.shape[0]
+for i in range(2000):
+
+	# 这里我们使用的softmax 是 Relu
+	hidden_layer = np.maximum(0, np.dot(X, W) + b)
+
+	scores = np.dot(hidden_layer, W2) + b2
+	exp_scores = np.exp(scores)
+	probs = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
+	
+	corect_logprobs = -np.log(probs[range(num_examples),y])
+	
+	# 计算损失
+	data_loss = np.sum(corect_logprobs)/num_examples
+	reg_loss = 0.5*reg*np.sum(W*W) + 0.5*reg*np.sum(W2*W2)
+	loss = data_loss + reg_loss
+	
+	if i % 100 == 0:
+		print "iteration %d: loss %f" % (i, loss)
+
+	dscores = probs
+	dscores[range(num_examples),y] -= 1
+	dscores /= num_examples
+  
+	# backpropate the gradient to the parameters
+	# first backprop into parameters W2 and b2
+	dW2 = np.dot(hidden_layer.T, dscores)
+	db2 = np.sum(dscores, axis=0, keepdims=True)
+	# next backprop into hidden layer
+	dhidden = np.dot(dscores, W2.T)
+	# backprop the ReLU non-linearity
+	dhidden[hidden_layer <= 0] = 0
+	
+	# 计算偏导
+	dW = np.dot(X.T, dhidden)
+	db = np.sum(dhidden, axis=0, keepdims=True)
+
+	# 添加正则化贡献
+	dW2 += reg * W2
+	dW += reg * W
+
+	# 进行参数更新
+	W += -step_size * dW
+	b += -step_size * db
+	W2 += -step_size * dW2
+	b2 += -step_size * db2
+
+# 最后设置一下隐层参数
+hidden_layer = np.maximum(0, np.dot(X, W) + b)
+scores = np.dot(hidden_layer, W2) + b2
+predicted_class = np.argmax(scores, axis=1)
+print 'training accuracy: %.2f' % (np.mean(predicted_class == y))
+
+
+# 进行画图操作
+h = 0.02
+x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
+y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
+                     np.arange(y_min, y_max, h))
+Z = np.dot(np.maximum(0, np.dot(np.c_[xx.ravel(), yy.ravel()], W) + b), W2) + b2
+Z = np.argmax(Z, axis=1)
+Z = Z.reshape(xx.shape)
+fig = plt.figure()
+plt.contourf(xx, yy, Z, cmap=plt.cm.Spectral, alpha=0.8)
+plt.scatter(X[:, 0], X[:, 1], c=y, s=40, cmap=plt.cm.Spectral)
+plt.xlim(xx.min(), xx.max())
+plt.ylim(yy.min(), yy.max())
+plt.show()
